@@ -1,6 +1,7 @@
 const { Command } = require('commander');
 const http = require('http');
-const fs = require('fs');
+const fs = require('fs').promises;
+const path = require('path');
 
 const cmd = new Command();
 
@@ -12,14 +13,35 @@ cmd
 cmd.parse(process.argv);
 const o = cmd.opts();
 
-if (!fs.existsSync(o.cache)) {
-  console.error(`кеш директорія "${o.cache}" не існує`);
-  process.exit(1);
+async function checkCacheDirectory() {
+  try {
+    await fs.access(o.cache);
+  } catch (err) {
+    console.error(`кеш директорія "${o.cache}" не існує`);
+    process.exit(1);
+  }
 }
 
-const server = http.createServer((req, res) => {
-  res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-  res.end('сервер працює\n');
+checkCacheDirectory();
+
+const server = http.createServer(async (req, res) => {
+  const parts = req.url.split('/');
+  const code = parts[1];
+
+  if (req.method === 'GET' && code) {
+    const filePath = path.join(o.cache, `${code}.jpg`);
+    try {
+      const data = await fs.readFile(filePath);
+      res.writeHead(200, { 'Content-Type': 'image/jpeg' });
+      res.end(data);
+    } catch (err) {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('Not found');
+    }
+  } else {
+    res.writeHead(405, { 'Content-Type': 'text/plain' });
+    res.end('Method not allowed');
+  }
 });
 
 server.listen(o.port, o.host, () => {
